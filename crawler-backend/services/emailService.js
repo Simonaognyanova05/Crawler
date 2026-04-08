@@ -1,31 +1,26 @@
 const nodemailer = require("nodemailer");
 
+// Добавяме трети параметър 'originalText'
 async function sendClassificationEmail(to, classification) {
     const transporter = nodemailer.createTransport({
         host: "smtp.office365.com",
         port: 587,
-        secure: false,
         auth: {
             user: process.env.EMAIL,
             pass: process.env.PASSWORD
-        },
-        tls: {
-            rejectUnauthorized: false
         }
     });
 
     await transporter.sendMail({
-        from: process.env.EMAIL, to,
-        subject: "Класификация на заявката",
-        text: `Тип на заявката: ${classification}`
+        from: process.env.EMAIL,
+        to: to,
+        subject: "Резултат от класификация",
+        // Изпращаме само етикета
+        text: `Тип на заявката: ${classification}`,
+        html: `<p>Тип на заявката: <b>${classification}</b></p>`
     });
 }
 
 module.exports = {
     sendClassificationEmail
 };
-
-
-
-
-

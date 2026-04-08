@@ -1,16 +1,28 @@
 const axios = require("axios");
 
 async function classifyText(text) {
+    const endpoint = "https://eurobank-planb.openai.azure.com/";
     const response = await axios.post(
-        "http://planb-bulgaria.duckdns.org:11434/api/generate",
+        endpoint,
         {
-            model: "devstral-small-2:24b",
-            prompt: `Classify the following request as one of: http, mongo, sql, redis, unknown. Return ONLY the label. Request:\n\n${text}`,
-            stream: false
+            messages: [
+                {
+                    role: "user",
+                    content: `Classify the following request as one of: http, mongo, sql, redis, unknown. Return ONLY the label. Request:${text}`
+                }
+            ],
+            max_tokens: 10,
+            temperature: 0
+        },
+        {
+            headers: {
+                "Content-Type": "application/json",
+                "api-key": AZURE_OPENAI_KEY
+            }
         }
     );
 
-    return response.data.response.trim();
+    return response.data.choices[0].message.content.trim();
 }
 
 module.exports = { classifyText };
