@@ -20,16 +20,19 @@ async function classifyText(text) {
                 {
                     role: "system",
                     content:
-                        "You are an AI model that receives a list of news articles and returns ONLY the hacker-related ones. " +
-                        "Return the result as a clean list of titles and links. Do not add explanations or commentary.",
+                        "You are an AI classifier. You ALWAYS return ONLY valid JSON. " +
+                        "No markdown, no lists, no numbering, no explanations. " +
+                        "Return an array of objects in this exact format: " +
+                        "[{\"id\": \"string\", \"title\": \"string\", \"link\": \"string\"}]. " +
+                        "If no hacker-related articles exist, return []."
                 },
                 {
                     role: "user",
-                    content: `Here is a list of news articles:\n\n${text}\n\nReturn ONLY the hacker-related ones.`,
-                },
+                    content: `Classify ONLY the hacker-related articles from this list and return VALID JSON:\n\n${text}`
+                }
             ],
             temperature: 0,
-            max_tokens: 1000,
+            max_tokens: 1500
         });
 
         return response.choices[0].message.content.trim();
@@ -38,5 +41,6 @@ async function classifyText(text) {
         throw new Error("LLM classification failed");
     }
 }
+
 
 module.exports = { classifyText };
