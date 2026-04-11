@@ -5,6 +5,28 @@ const Article = require("../models/Article");
 const { scrapeHackerNews } = require("../services/hackerNewsScraper");
 const { classifyText } = require("../services/classificationService");
 const { sendEmail } = require("../services/emailService");
+const User = require("../models/User");
+
+router.post("/subscribe", async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+    }
+
+    try {
+        const user = await User.findOneAndUpdate(
+            { email },
+            { email },
+            { upsert: true, new: true }
+        );
+
+        res.json({ success: true, message: "Subscribed successfully", user });
+    } catch (err) {
+        console.error("Subscription error:", err);
+        res.status(500).json({ error: "Failed to subscribe" });
+    }
+});
 
 
 // 📌 Main endpoint: scrape → save → classify → send email

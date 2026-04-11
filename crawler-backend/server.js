@@ -2,6 +2,25 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+const axios = require("axios");
+const cron = require("node-cron");
+const User = require("./models/User");
+
+cron.schedule("21 13 * * *", async () => {
+    console.log("Running daily hacker news job at 08:00...");
+
+    const users = await User.find();
+
+    for (const user of users) {
+        try {
+            await axios.post("http://localhost:3030/send-hacker-news", {
+                email: user.email
+            });
+        } catch (err) {
+            console.error("Failed to send to:", user.email, err.message);
+        }
+    }
+});
 
 const newsRoutes = require("./routes/news");
 
