@@ -1,16 +1,13 @@
 import { useState } from "react";
 import { articleService } from "../services/articleService";
-import { classifyService } from "../services/classifyService";
+import { newsService } from "../services/newsService";
 
 export default function Home() {
-    const [url, setUrl] = useState("");
+    const [email, setEmail] = useState("");
     const [articles, setArticles] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [classEmail, setClassEmail] = useState("");
-    const [classResult, setClassResult] = useState(null);
 
     const handleFetch = async () => {
-        if (!url) return;
         setLoading(true);
 
         try {
@@ -23,18 +20,31 @@ export default function Home() {
         }
     };
 
-    const handleClassify = async () => {
-        // Проверяваме url вместо classText
-        if (!url || !classEmail) {
-            alert("Моля въведете URL адрес и имейл.");
+    const handleSendAllNews = async () => {
+        if (!email) {
+            alert("Моля въведете имейл.");
             return;
         }
 
         try {
-            const result = await classifyService.classify(url, classEmail);
-            setClassResult(result);
+            await newsService.sendAllNews(email);
+            alert("Всички новини бяха изпратени успешно!");
         } catch (err) {
-            alert("Грешка при класификация: " + err.message);
+            alert("Грешка при изпращане: " + err.message);
+        }
+    };
+
+    const handleSendHackerNews = async () => {
+        if (!email) {
+            alert("Моля въведете имейл.");
+            return;
+        }
+
+        try {
+            await newsService.sendHackerNews(email);
+            alert("Hacker News новините бяха изпратени успешно!");
+        } catch (err) {
+            alert("Грешка при изпращане: " + err.message);
         }
     };
 
@@ -42,47 +52,40 @@ export default function Home() {
         <div style={{ padding: "40px", fontFamily: "Arial" }}>
             <h1>Website Crawler</h1>
 
-            <input
-                type="text"
-                placeholder="Enter URL (for fetching or classification)..."
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                style={{ width: "400px", padding: "10px" }}
-            />
-
             <button
                 onClick={handleFetch}
                 disabled={loading}
-                style={{ marginLeft: "10px", padding: "10px", cursor: loading ? "not-allowed" : "pointer" }}
+                style={{ padding: "10px", cursor: loading ? "not-allowed" : "pointer" }}
             >
-                {loading ? "Fetching..." : "Fetch Articles"}
+                {loading ? "Fetching..." : "Fetch Hacker News"}
             </button>
 
             {loading && <p>Зареждане на статиите... Моля, изчакайте.</p>}
 
             <div style={{ marginTop: "40px", padding: "20px", border: "1px solid #ddd" }}>
-                <h2>Класификация на заявка</h2>
-                <p>Класифицира въведения по-горе URL адрес.</p>
+                <h2>Изпращане на новини по имейл</h2>
 
                 <input
                     type="email"
-                    placeholder="Въведи служебен имейл..."
-                    value={classEmail}
-                    onChange={(e) => setClassEmail(e.target.value)}
+                    placeholder="Въведи имейл..."
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     style={{ width: "100%", padding: "10px", marginTop: "10px" }}
                 />
 
-                <button onClick={handleClassify} style={{ marginTop: "10px", padding: "10px", cursor: "pointer" }}>
-                    Класифицирай URL и изпрати имейл
+                <button
+                    onClick={handleSendAllNews}
+                    style={{ marginTop: "10px", padding: "10px", cursor: "pointer" }}
+                >
+                    Изпрати всички новини от базата
                 </button>
 
-                {classResult && (
-                    <div style={{ marginTop: "20px" }}>
-                        <h3>Резултат:</h3>
-                        <p><strong>Класификация:</strong> {classResult.classification}</p>
-                        {classResult.sentTo && <p><strong>Изпратено до:</strong> {classResult.sentTo}</p>}
-                    </div>
-                )}
+                <button
+                    onClick={handleSendHackerNews}
+                    style={{ marginTop: "10px", padding: "10px", cursor: "pointer", marginLeft: "10px" }}
+                >
+                    Изпрати Hacker News новини
+                </button>
             </div>
 
             <div style={{ marginTop: "30px" }}>

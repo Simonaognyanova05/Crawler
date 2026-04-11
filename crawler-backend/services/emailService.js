@@ -1,9 +1,8 @@
 const nodemailer = require("nodemailer");
 
-async function sendClassificationEmail(to, classification) {
+async function sendEmail(to, htmlContent) {
     const transporter = nodemailer.createTransport({
-        host: "smtp.office365.com",
-        port: 587,
+        service: "gmail",
         auth: {
             user: process.env.EMAIL,
             pass: process.env.PASSWORD
@@ -12,13 +11,13 @@ async function sendClassificationEmail(to, classification) {
 
     await transporter.sendMail({
         from: process.env.EMAIL,
-        to: to,
-        subject: "Резултат от класификация",
-        text: `Тип на заявката: ${classification}`,
-        html: `<p>Тип на заявката: <b>${classification}</b></p>`
+        to,
+        subject: "Hacker News – Latest Hacker-Related Articles",
+        text: "Your email client does not support HTML. Please view the HTML version.",
+        html: htmlContent
     });
 }
 
 module.exports = {
-    sendClassificationEmail
+    sendEmail
 };

@@ -7,6 +7,7 @@
     "express": "^5.2.1",
     "mongoose": "^9.4.1",
     "nodemailer": "^8.0.5",
+    "openai": "^6.34.0",
     "rss-parser": "^3.13.0"
   },
   "name": "crawler-backend",
