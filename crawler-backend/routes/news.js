@@ -27,6 +27,26 @@ router.post("/subscribe", async (req, res) => {
         res.status(500).json({ error: "Failed to subscribe" });
     }
 });
+router.post("/unsubscribe", async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+    }
+
+    try {
+        const deleted = await User.findOneAndDelete({ email });
+
+        if (!deleted) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        res.json({ success: true, message: "User unsubscribed and removed from database." });
+    } catch (err) {
+        console.error("Unsubscribe error:", err);
+        res.status(500).json({ error: "Failed to unsubscribe" });
+    }
+});
 
 
 // 📌 Main endpoint: scrape → save → classify → send email

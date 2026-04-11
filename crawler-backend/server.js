@@ -6,7 +6,7 @@ const axios = require("axios");
 const cron = require("node-cron");
 const User = require("./models/User");
 
-cron.schedule("21 13 * * *", async () => {
+cron.schedule("0 8 * * *", async () => {
     console.log("Running daily hacker news job at 08:00...");
 
     const users = await User.find();
