@@ -20,12 +20,12 @@ async function classifyText(text) {
                 {
                     role: "system",
                     content:
-                        "You are an AI classifier. You ALWAYS return ONLY valid JSON. " +
-                        "No markdown, no lists, no numbering, no explanations. " +
-                        "Return an array of objects in this exact format: " +
-                        "[{\"id\": \"string\", \"title\": \"string\", \"link\": \"string\"}]. " +
-                        "If no hacker-related articles exist, return []."
+                        "You ALWAYS return ONLY valid JSON. " +
+                        "Return an array like this: " +
+                        "[{\"id\":\"string\",\"title\":\"string\",\"link\":\"string\",\"topic\":\"string\"}]. " +
+                        "topic must be one of: security, programming, linux, ai, windows, networking."
                 },
+
                 {
                     role: "user",
                     content: `Classify ONLY the hacker-related articles from this list and return VALID JSON:\n\n${text}`

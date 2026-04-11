@@ -5,14 +5,30 @@ export default function Home() {
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
 
+    // Теми за абонамент
+    const [topics, setTopics] = useState([]);
+
+    const toggleTopic = (topic) => {
+        setTopics(prev =>
+            prev.includes(topic)
+                ? prev.filter(t => t !== topic)
+                : [...prev, topic]
+        );
+    };
+
     const handleSubscribe = async () => {
         if (!email) {
             alert("Моля въведете имейл.");
             return;
         }
 
+        if (topics.length === 0) {
+            alert("Моля изберете поне една тема.");
+            return;
+        }
+
         try {
-            await newsService.subscribe(email);
+            await newsService.subscribe(email, topics);
             alert("Успешно се абонирахте!");
         } catch (err) {
             alert("Грешка при абониране: " + err.message);
@@ -66,9 +82,67 @@ export default function Home() {
                     style={{ width: "100%", padding: "10px", marginTop: "10px" }}
                 />
 
+                <h3 style={{ marginTop: "20px" }}>Избери теми:</h3>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <label>
+                        <input
+                            type="checkbox"
+                            checked={topics.includes("security")}
+                            onChange={() => toggleTopic("security")}
+                        />
+                        Security
+                    </label>
+
+                    <label>
+                        <input
+                            type="checkbox"
+                            checked={topics.includes("programming")}
+                            onChange={() => toggleTopic("programming")}
+                        />
+                        Programming
+                    </label>
+
+                    <label>
+                        <input
+                            type="checkbox"
+                            checked={topics.includes("linux")}
+                            onChange={() => toggleTopic("linux")}
+                        />
+                        Linux
+                    </label>
+
+                    <label>
+                        <input
+                            type="checkbox"
+                            checked={topics.includes("ai")}
+                            onChange={() => toggleTopic("ai")}
+                        />
+                        AI
+                    </label>
+
+                    <label>
+                        <input
+                            type="checkbox"
+                            checked={topics.includes("windows")}
+                            onChange={() => toggleTopic("windows")}
+                        />
+                        Windows
+                    </label>
+
+                    <label>
+                        <input
+                            type="checkbox"
+                            checked={topics.includes("networking")}
+                            onChange={() => toggleTopic("networking")}
+                        />
+                        Networking
+                    </label>
+                </div>
+
                 <button
                     onClick={handleSubscribe}
-                    style={{ marginTop: "10px", padding: "10px", cursor: "pointer" }}
+                    style={{ marginTop: "20px", padding: "10px", cursor: "pointer" }}
                 >
                     Абонирай се
                 </button>

@@ -8,6 +8,16 @@ const { sendEmail } = require("../services/emailService");
 const User = require("../models/User");
 
 // ----------------------
+// REMOVE MARKDOWN CODE FENCES
+// ----------------------
+function stripMarkdownCodeFence(str) {
+    return str
+        .replace(/```json/gi, "")
+        .replace(/```/g, "")
+        .trim();
+}
+
+// ----------------------
 // SAFE JSON PARSE HELPER
 // ----------------------
 function safeJsonParse(str) {
@@ -28,17 +38,17 @@ function generateEmailHtml(articles) {
         <h2>Today's Hacker News Updates</h2>
         <ul>
             ${articles
-            .map(a => `<li><a href="${a.link}">${a.title}</a></li>`)
+            .map(a => `<li><a href="${a.link}">${a.title}</a> <strong>[${a.topic}]</strong></li>`)
             .join("")}
         </ul>
     `;
 }
 
 // ----------------------
-// SUBSCRIBE
+// SUBSCRIBE (WITH TOPICS)
 // ----------------------
 router.post("/subscribe", async (req, res) => {
-    const { email } = req.body;
+    const { email, topics } = req.body;
 
     if (!email) {
         return res.status(400).json({ error: "Email is required" });
@@ -47,8 +57,8 @@ router.post("/subscribe", async (req, res) => {
     try {
         const user = await User.findOneAndUpdate(
             { email },
-            { email },
-            { upsert: true, new: true }
+            { email, topics },
+            { upsert: true, returnDocument: "after" } // FIX MONGOOSE WARNING
         );
 
         res.json({ success: true, message: "Subscribed successfully", user });
@@ -81,7 +91,7 @@ router.post("/unsubscribe", async (req, res) => {
 });
 
 // ----------------------
-// SEND HACKER NEWS
+// SEND HACKER NEWS (FILTER BY TOPICS)
 // ----------------------
 router.post("/send-hacker-news", async (req, res) => {
     const { email } = req.body;
@@ -100,8 +110,11 @@ router.post("/send-hacker-news", async (req, res) => {
         // 3. Classify with LLM
         const classifiedText = await classifyText(JSON.stringify(scrapedArticles));
 
+        // 3.1 Remove markdown fences
+        const cleaned = stripMarkdownCodeFence(classifiedText);
+
         // 4. Safe JSON parse
-        let classifiedArticles = safeJsonParse(classifiedText);
+        let classifiedArticles = safeJsonParse(cleaned);
 
         // ❗ Fallback: ако LLM върне текст → не спираме процеса
         if (!classifiedArticles) {
@@ -109,13 +122,15 @@ router.post("/send-hacker-news", async (req, res) => {
             classifiedArticles = [];
         }
 
-        // 5. Filter only new ones
+        // 5. Filter only new ones AND matching topics
         const newArticles = classifiedArticles.filter(
-            a => !user.lastNewsIds.includes(a.id)
+            a =>
+                !user.lastNewsIds.includes(a.id) &&
+                user.topics.includes(a.topic)
         );
 
         if (newArticles.length === 0) {
-            return res.json({ success: true, message: "No new articles" });
+            return res.json({ success: true, message: "No new articles for selected topics" });
         }
 
         // 6. Send email (HTML instead of array)
@@ -123,7 +138,7 @@ router.post("/send-hacker-news", async (req, res) => {
         await sendEmail(email, html);
 
         // 7. Update user
-        user.lastNewsIds = newArticles.map(a => a.id);
+        user.lastNewsIds = [...user.lastNewsIds, ...newArticles.map(a => a.id)];
         user.lastSentAt = new Date();
         await user.save();
 
