@@ -1,21 +1,26 @@
 const nodemailer = require("nodemailer");
 
 async function sendEmail(to, htmlContent) {
+
+    console.log("Sending email to:", to);
+
     const transporter = nodemailer.createTransport({
         service: "gmail",
         auth: {
-            user: process.env.EMAIL,
-            pass: process.env.PASSWORD
+            user: process.env.SMTP_FROM,
+            pass: process.env.SMTP_PASS
         }
     });
 
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
         from: process.env.EMAIL,
         to,
-        subject: "Hacker News – Latest Hacker-Related Articles",
-        text: "Your email client does not support HTML. Please view the HTML version.",
+        subject: "Latest News",
         html: htmlContent
     });
+
+    console.log("Email sent:", info.messageId);
+
 }
 
 module.exports = {

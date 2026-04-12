@@ -9,7 +9,7 @@ async function scrapeHackerNews() {
         const feed = await parser.parseURL("https://hnrss.org/frontpage");
 
         // 2) Взимаме последните 140 новини
-        const items = feed.items.slice(0, 140);
+        const items = feed.items.slice(0, 10);
 
         const results = [];
 
