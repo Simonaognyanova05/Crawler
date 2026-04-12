@@ -32,7 +32,8 @@ export default function Home() {
             await actionFn();
             alert(successMsg);
         } catch (err) {
-            alert("Грешка: " + (err.response?.data?.error || err.message));
+            // поправено: err.message винаги е безопасно
+            alert("Грешка: " + err.message);
         } finally {
             setLoading(false);
         }
