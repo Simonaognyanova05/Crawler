@@ -1,65 +1,47 @@
 const BASE_URL = "http://localhost:3030";
 
-async function subscribe(email, siteUrl, topics) {
-    const res = await fetch(`${BASE_URL}/subscribe`, {
+/**
+ * Помощна функция за общи заявки
+ */
+async function apiRequest(endpoint, body) {
+    const res = await fetch(`${BASE_URL}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, siteUrl, topics })
+        body: JSON.stringify(body)
     });
 
+    const data = await res.json();
+
     if (!res.ok) {
-        throw new Error("Грешка при абониране");
+        // Изхвърляме специфичната грешка от сървъра, ако има такава
+        throw new Error(data.error || `Грешка при заявката към ${endpoint}`);
     }
 
-    return res.json();
+    return data;
 }
 
+async function subscribe(email, siteUrl, topics) {
+    return apiRequest("/subscribe", { email, siteUrl, topics });
+}
 
 async function unsubscribe(email) {
-    const res = await fetch(`${BASE_URL}/unsubscribe`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email })
-    });
-
-    if (!res.ok) {
-        throw new Error("Грешка при отписване");
-    }
-
-    return res.json();
+    return apiRequest("/unsubscribe", { email });
 }
 
-async function sendHackerNews(email) {
-    const res = await fetch(`${BASE_URL}/send-hacker-news`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email })
-    });
-
-    if (!res.ok) {
-        throw new Error("Грешка при изпращане на Hacker News");
-    }
-
-    return res.json();
-}
-
+/**
+ * Извиква еднократно извличане и изпращане на новини
+ */
 async function fetchNews(email, siteUrl, topics = []) {
-    const res = await fetch(`${BASE_URL}/fetch-news`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, siteUrl, topics, sendNow: true })
+    return apiRequest("/fetch-news", {
+        email,
+        siteUrl,
+        topics
+        // sendNow: true вече не е нужно, тъй като /fetch-news е замислен за това
     });
-
-    if (!res.ok) {
-        throw new Error("Грешка при изпращане на новини от сайта");
-    }
-
-    return res.json();
 }
 
 export const newsService = {
     subscribe,
     unsubscribe,
-    sendHackerNews,
     fetchNews
 };

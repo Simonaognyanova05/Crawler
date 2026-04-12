@@ -1,21 +1,9 @@
 const express = require("express");
 const router = express.Router();
-
 const User = require("../models/User");
 const { smartCrawl } = require("../services/smartCrawler");
 const { classifyText } = require("../services/classificationService");
 const { sendEmail } = require("../services/emailService");
-
-// ----------------------------
-// SAFE JSON PARSE
-// ----------------------------
-function safeJsonParse(str) {
-    try {
-        return JSON.parse(str);
-    } catch {
-        return null;
-    }
-}
 
 router.post("/fetch-news", async (req, res, next) => {
     try {
@@ -25,102 +13,82 @@ router.post("/fetch-news", async (req, res, next) => {
             return res.status(400).json({ error: "email и siteUrl са задължителни" });
         }
 
-        // ----------------------------
-        // USER
-        // ----------------------------
+        // 1. ПОТРЕБИТЕЛ И ТЕМИ
         let user = await User.findOne({ email });
         const isSubscriber = Boolean(user);
 
+        // Вземаме темите от базата ако е абонат, иначе от тялото на заявката
         const effectiveTopics = isSubscriber ? user.topics : topics;
-
         const normalizedTopics = Array.isArray(effectiveTopics)
             ? effectiveTopics.map(t => t?.toLowerCase()).filter(Boolean)
             : [];
 
-        // ----------------------------
-        // SCRAPE
-        // ----------------------------
+        // 2. SCRAPE
+        console.log(`🔍 Извличане от: ${siteUrl}`);
         const articles = await smartCrawl(siteUrl);
 
-        if (!articles.length) {
-            return res.status(404).json({ error: "Няма намерени новини" });
+        if (!articles || !articles.length) {
+            return res.status(404).json({ error: "Няма намерени новини на този адрес" });
         }
 
-        let filteredArticles = articles;
+        // 3. ПЪРВОНАЧАЛНО ФИЛТРИРАНЕ (Махаме вече изпратените)
+        let unseenArticles = articles;
+        if (isSubscriber && user.lastNewsLinks) {
+            unseenArticles = articles.filter(a => !user.lastNewsLinks.includes(a.link));
+        }
 
-        // ----------------------------
-        // CLASSIFY (ONLY FOR HACKER NEWS)
-        // ----------------------------
-        const isHackerNews =
-            siteUrl.includes("hnrss") ||
-            siteUrl.includes("news.ycombinator.com");
+        if (unseenArticles.length === 0) {
+            return res.status(200).json({ message: "Няма нови статии от последното посещение" });
+        }
 
-        if (normalizedTopics.length > 0 && isHackerNews) {
-            const llmInput = articles.map(a => ({
+        // 4. CLASSIFICATION (Ако има избрани теми)
+        let finalArticles = unseenArticles;
+
+        if (normalizedTopics.length > 0) {
+            const llmInput = unseenArticles.map(a => ({
                 title: a.title,
-                link: a.link,
-                description: a.description
+                link: a.link
             }));
 
-            let classified = await classifyText(JSON.stringify(llmInput));
+            // Използваме фиксирания classifyText
+            const classified = await classifyText(JSON.stringify(llmInput));
 
-            const parsed = safeJsonParse(classified);
-
-            if (!parsed || !Array.isArray(parsed)) {
-                console.log("⚠ LLM returned empty → skipping classification");
-                filteredArticles = articles;
-            } else {
-                filteredArticles = parsed.filter(a =>
-                    a.topic &&
-                    normalizedTopics.includes(a.topic.toLowerCase())
+            if (Array.isArray(classified) && classified.length > 0) {
+                finalArticles = classified.filter(a =>
+                    a.topic && normalizedTopics.includes(a.topic.toLowerCase())
                 );
+            } else {
+                console.log("ℹ️ LLM не откри съвпадения по теми.");
+                return res.status(200).json({ message: "Няма новини, отговарящи на вашите теми" });
             }
         }
 
-        // ----------------------------
-        // REMOVE ALREADY SENT
-        // ----------------------------
-        let finalArticles = filteredArticles;
-
-        if (isSubscriber) {
-            finalArticles = filteredArticles.filter(
-                a => !user.lastNewsLinks.includes(a.link)
-            );
-        }
-
         if (finalArticles.length === 0) {
-            return res.json({ message: "Няма нови статии за изпращане" });
+            return res.status(200).json({ message: "Няма статии за изпращане след филтриране" });
         }
 
-        // ----------------------------
-        // SEND EMAIL
-        // ----------------------------
-        const html = `
-            <h2>Вашите новини</h2>
-            <ul>
-                ${finalArticles.map(a => `<li><a href="${a.link}">${a.title}</a></li>`).join("")}
-            </ul>
-        `;
+        // 5. SEND EMAIL
+        // Подаваме САМО email и масива finalArticles. 
+        // emailService ще генерира HTML-а сам.
+        await sendEmail(email, finalArticles);
 
-        await sendEmail(email, html);
-
-        // ----------------------------
-        // SAVE USER
-        // ----------------------------
+        // 6. SAVE PROGRESS (Само за абонати)
         if (isSubscriber) {
-            user.lastNewsLinks.push(...finalArticles.map(a => a.link));
+            const updatedLinks = [...user.lastNewsLinks, ...finalArticles.map(a => a.link)];
+            user.lastNewsLinks = updatedLinks.slice(-200);
             user.lastSentAt = new Date();
             await user.save();
         }
 
         return res.json({
-            message: isSubscriber ? "Изпратени нови статии" : "Изпратен еднократен имейл",
+            success: true,
+            message: isSubscriber ? "Изпратени нови абонаментни статии" : "Изпратен еднократен имейл",
             count: finalArticles.length
         });
 
     } catch (err) {
-        console.error("Fetch news error:", err);
-        next(err);
+        console.error("❌ Fetch news error:", err);
+        res.status(500).json({ error: "Възникна грешка при обработката на новините" });
     }
 });
 

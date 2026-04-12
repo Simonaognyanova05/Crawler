@@ -1,24 +1,12 @@
 const express = require("express");
 const router = express.Router();
-
 const User = require("../models/User");
 const { smartCrawl } = require("../services/smartCrawler");
 const { classifyText } = require("../services/classificationService");
 const { sendEmail } = require("../services/emailService");
 
 // ----------------------
-// SAFE JSON PARSE
-// ----------------------
-function safeJsonParse(str) {
-    try {
-        return JSON.parse(str);
-    } catch {
-        return null;
-    }
-}
-
-// ----------------------
-// SUBSCRIBE (email + siteUrl + topics)
+// SUBSCRIBE / UPDATE
 // ----------------------
 router.post("/subscribe", async (req, res) => {
     const { email, topics, siteUrl } = req.body;
@@ -32,17 +20,91 @@ router.post("/subscribe", async (req, res) => {
             { email },
             {
                 email,
-                topics: topics || [],
+                topics: Array.isArray(topics) ? topics.map(t => t.toLowerCase()) : [],
                 siteUrl,
-                subscribed: true,
-                lastNewsLinks: []
+                subscribed: true
             },
-            { upsert: true, returnDocument: "after" }
+            { upsert: true, new: true }
         );
 
-        res.json({ success: true, message: "Subscribed successfully", user });
+        res.json({ success: true, message: "Абонаментът е успешен", user });
     } catch (err) {
-        res.status(500).json({ error: "Failed to subscribe" });
+        res.status(500).json({ error: "Грешка при абониране" });
+    }
+});
+
+// ----------------------
+// FETCH & SEND NEWS (Унифициран маршрут)
+// ----------------------
+router.post("/fetch-news", async (req, res) => {
+    const { email } = req.body;
+
+    try {
+        const user = await User.findOne({ email });
+        if (!user) return res.status(404).json({ error: "Потребителят не е намерен" });
+
+        console.log(`📡 Скрапване на: ${user.siteUrl} за ${email}`);
+
+        // 1. SCRAPE
+        const articles = await smartCrawl(user.siteUrl);
+        if (!articles || !articles.length) {
+            return res.status(404).json({ error: "Няма намерени статии в сайта. Опитайте по-късно." });
+        }
+
+        // 2. FILTER ALREADY SENT
+        const unseenArticles = articles.filter(a => !user.lastNewsLinks.includes(a.link));
+
+        if (!unseenArticles.length) {
+            return res.status(200).json({ message: "Няма нови статии от последното изпращане." });
+        }
+
+        // 3. CLASSIFY чрез AI
+        const normalizedTopics = user.topics || [];
+        let filteredArticles = [];
+
+        if (normalizedTopics.length > 0) {
+            const llmInput = unseenArticles.map(a => ({
+                title: a.title,
+                link: a.link
+            }));
+
+            // classifyText вече връща масив благодарение на последните фиксове
+            const classified = await classifyText(JSON.stringify(llmInput));
+
+            if (Array.isArray(classified) && classified.length > 0) {
+                // Филтрираме само тези, които съвпадат с темите на потребителя
+                filteredArticles = classified.filter(a =>
+                    a.topic && normalizedTopics.includes(a.topic.toLowerCase())
+                );
+            }
+        } else {
+            // Ако потребителят няма избрани теми, пращаме всичко ново (или първите 5)
+            filteredArticles = unseenArticles.slice(0, 10);
+        }
+
+        if (!filteredArticles.length) {
+            return res.status(200).json({ message: "Новите статии не съвпадат с Вашите теми." });
+        }
+
+        // 4. SEND EMAIL
+        // ВАЖНО: Вече пращаме масива filteredArticles, а НЕ HTML стринг
+        await sendEmail(user.email, filteredArticles);
+
+        // 5. UPDATE USER HISTORY
+        const updatedLinks = [...user.lastNewsLinks, ...filteredArticles.map(a => a.link)];
+        user.lastNewsLinks = updatedLinks.slice(-200);
+        user.lastSentAt = new Date();
+        await user.save();
+
+        res.json({
+            success: true,
+            message: `Успешно изпратени ${filteredArticles.length} новини.`,
+            sentCount: filteredArticles.length
+        });
+
+    } catch (err) {
+        console.error("❌ Грешка при обработка на новините:", err);
+        res.status(500).json({ error: "Вътрешна сървърна грешка при изпращане." });
     }
 });
 
@@ -51,107 +113,11 @@ router.post("/subscribe", async (req, res) => {
 // ----------------------
 router.post("/unsubscribe", async (req, res) => {
     const { email } = req.body;
-
-    if (!email) return res.status(400).json({ error: "Email is required" });
-
     try {
-        const deleted = await User.findOneAndDelete({ email });
-
-        if (!deleted) return res.status(404).json({ error: "User not found" });
-
-        res.json({ success: true, message: "User unsubscribed" });
-    } catch {
-        res.status(500).json({ error: "Failed to unsubscribe" });
-    }
-});
-
-// ----------------------
-// DAILY NEWS (UNIVERSAL)
-// ----------------------
-router.post("/send-daily-news", async (req, res) => {
-    const { email } = req.body;
-
-    const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    if (!user.siteUrl) {
-        return res.status(400).json({ error: "User has no siteUrl set" });
-    }
-
-    const normalizedTopics = Array.isArray(user.topics)
-        ? user.topics.map(t => t?.toLowerCase()).filter(Boolean)
-        : [];
-
-    try {
-        console.log("📡 Crawling:", user.siteUrl);
-
-        // 1. SCRAPE
-        const articles = await smartCrawl(user.siteUrl);
-
-        if (!articles.length) {
-            return res.json({ success: false, message: "No articles found" });
-        }
-
-        let filteredArticles = articles;
-
-        // 2. CLASSIFY ONLY IF SITE IS HACKER NEWS
-        const isHackerNews =
-            user.siteUrl.includes("hnrss") ||
-            user.siteUrl.includes("news.ycombinator.com");
-
-        if (normalizedTopics.length > 0 && isHackerNews) {
-            const llmInput = articles.map(a => ({
-                title: a.title,
-                link: a.link,
-                description: a.description
-            }));
-
-            let classified = await classifyText(JSON.stringify(llmInput));
-            const parsed = safeJsonParse(classified);
-
-            if (!parsed || !Array.isArray(parsed)) {
-                console.log("⚠ LLM returned empty → skipping classification");
-                filteredArticles = articles;
-            } else {
-                filteredArticles = parsed.filter(a =>
-                    a.topic &&
-                    normalizedTopics.includes(a.topic.toLowerCase())
-                );
-            }
-        }
-
-        // 3. REMOVE ALREADY SENT
-        const newArticles = filteredArticles.filter(
-            a => !user.lastNewsLinks.includes(a.link)
-        );
-
-        if (!newArticles.length) {
-            return res.json({ success: true, message: "No new articles" });
-        }
-
-        // 4. EMAIL HTML
-        const html = `
-            <h2>Your Daily News</h2>
-            <ul>
-                ${newArticles
-                    .map(a => `<li><a href="${a.link}">${a.title}</a></li>`)
-                    .join("")}
-            </ul>
-        `;
-
-        // 5. SEND EMAIL
-        await sendEmail(user.email, html);
-
-        // 6. UPDATE USER
-        user.lastNewsLinks.push(...newArticles.map(a => a.link));
-        user.lastSentAt = new Date();
-        await user.save();
-
-        res.json({ success: true, sent: newArticles.length });
-
+        await User.findOneAndUpdate({ email }, { subscribed: false });
+        res.json({ success: true, message: "Успешно отписване." });
     } catch (err) {
-        console.error("❌ Daily news error:", err);
-        res.status(500).json({ error: "Internal server error" });
+        res.status(500).json({ error: "Грешка при отписване." });
     }
 });
 

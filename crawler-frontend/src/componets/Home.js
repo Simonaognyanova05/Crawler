@@ -7,6 +7,15 @@ export default function Home() {
     const [topics, setTopics] = useState([]);
     const [loading, setLoading] = useState(false);
 
+    const availableTopics = [
+        { id: "security", label: "Security" },
+        { id: "programming", label: "Programming" },
+        { id: "linux", label: "Linux" },
+        { id: "ai", label: "AI" },
+        { id: "windows", label: "Windows" },
+        { id: "networking", label: "Networking" }
+    ];
+
     const toggleTopic = (topic) => {
         setTopics(prev =>
             prev.includes(topic)
@@ -15,209 +24,115 @@ export default function Home() {
         );
     };
 
-    const handleSubscribe = async () => {
-        if (!email) {
-            alert("Моля въведете имейл.");
-            return;
-        }
-
-        if (!siteUrl) {
-            alert("Моля въведете сайт URL.");
-            return;
-        }
-
-        if (topics.length === 0) {
-            alert("Моля изберете поне една тема.");
-            return;
-        }
-
-        try {
-            await newsService.subscribe(email, siteUrl, topics);
-            alert("Успешно се абонирахте!");
-        } catch (err) {
-            alert("Грешка при абониране: " + err.message);
-        }
-    };
-
-
-    const handleUnsubscribe = async () => {
-        if (!email) {
-            alert("Моля въведете имейл.");
-            return;
-        }
-
-        try {
-            await newsService.unsubscribe(email);
-            alert("Успешно се отписахте!");
-        } catch (err) {
-            alert("Грешка при отписване: " + err.message);
-        }
-    };
-
-    const handleSendHackerNews = async () => {
-        if (!email) {
-            alert("Моля въведете имейл.");
-            return;
-        }
-
+    // Универсална функция за заявки
+    const executeAction = async (actionFn, successMsg) => {
+        if (!email) return alert("Моля въведете имейл.");
         setLoading(true);
-
         try {
-            await newsService.sendHackerNews(email);
-            alert("Hacker News новините бяха изпратени успешно!");
+            await actionFn();
+            alert(successMsg);
         } catch (err) {
-            alert("Грешка при изпращане: " + err.message);
+            alert("Грешка: " + (err.response?.data?.error || err.message));
         } finally {
             setLoading(false);
         }
     };
 
-    const handleSendWebsiteNews = async () => {
-        if (!email || !siteUrl) {
-            alert("Моля въведете имейл и сайт URL.");
-            return;
-        }
+    const handleSubscribe = () => {
+        if (!siteUrl) return alert("Моля въведете URL.");
+        executeAction(
+            () => newsService.subscribe(email, siteUrl, topics),
+            "Успешно се абонирахте за ежедневни новини!"
+        );
+    };
 
-        setLoading(true);
+    const handleUnsubscribe = () => {
+        executeAction(
+            () => newsService.unsubscribe(email),
+            "Успешно се отписахте."
+        );
+    };
 
-        try {
-            await newsService.fetchNews(email, siteUrl, topics);
-            alert("Новините от сайта бяха изпратени успешно!");
-        } catch (err) {
-            alert("Грешка при изпращане: " + err.message);
-        } finally {
-            setLoading(false);
-        }
+    const handleSendNow = () => {
+        if (!siteUrl) return alert("Моля въведете URL.");
+        executeAction(
+            () => newsService.fetchNews(email, siteUrl, topics),
+            "Новините бяха изпратени към вашия имейл!"
+        );
     };
 
     return (
-        <div style={{ padding: "40px", fontFamily: "Arial" }}>
-            <h1>Website Crawler</h1>
+        <div style={{ maxWidth: "600px", margin: "40px auto", fontFamily: "Segoe UI, Tahoma, sans-serif" }}>
+            <h1 style={{ textAlign: "center", color: "#333" }}>AI News Aggregator</h1>
 
-            <div style={{ marginTop: "40px", padding: "20px", border: "1px solid #ddd" }}>
-                <h2>Абонамент и новини</h2>
-
-                <input
-                    type="email"
-                    placeholder="Въведи имейл..."
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    style={{ width: "100%", padding: "10px", marginTop: "10px" }}
-                />
-
-                <input
-                    type="text"
-                    placeholder="Въведи RSS линк на сайта..."
-                    value={siteUrl}
-                    onChange={(e) => setSiteUrl(e.target.value)}
-                    style={{ width: "100%", padding: "10px", marginTop: "10px" }}
-                />
-
-                <h3 style={{ marginTop: "20px" }}>Избери теми:</h3>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    <label>
-                        <input
-                            type="checkbox"
-                            checked={topics.includes("security")}
-                            onChange={() => toggleTopic("security")}
-                        />
-                        Security
-                    </label>
-
-                    <label>
-                        <input
-                            type="checkbox"
-                            checked={topics.includes("programming")}
-                            onChange={() => toggleTopic("programming")}
-                        />
-                        Programming
-                    </label>
-
-                    <label>
-                        <input
-                            type="checkbox"
-                            checked={topics.includes("linux")}
-                            onChange={() => toggleTopic("linux")}
-                        />
-                        Linux
-                    </label>
-
-                    <label>
-                        <input
-                            type="checkbox"
-                            checked={topics.includes("ai")}
-                            onChange={() => toggleTopic("ai")}
-                        />
-                        AI
-                    </label>
-
-                    <label>
-                        <input
-                            type="checkbox"
-                            checked={topics.includes("windows")}
-                            onChange={() => toggleTopic("windows")}
-                        />
-                        Windows
-                    </label>
-
-                    <label>
-                        <input
-                            type="checkbox"
-                            checked={topics.includes("networking")}
-                            onChange={() => toggleTopic("networking")}
-                        />
-                        Networking
-                    </label>
+            <div style={{ padding: "30px", border: "1px solid #eee", borderRadius: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+                <div style={{ marginBottom: "20px" }}>
+                    <label style={{ fontWeight: "bold" }}>Имейл адрес:</label>
+                    <input
+                        type="email"
+                        placeholder="example@mail.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        style={{ width: "100%", padding: "12px", marginTop: "8px", borderRadius: "6px", border: "1px solid #ccc", boxSizing: "border-box" }}
+                    />
                 </div>
 
-                <div style={{ marginTop: "20px" }}>
+                <div style={{ marginBottom: "20px" }}>
+                    <label style={{ fontWeight: "bold" }}>RSS / Сайт URL:</label>
+                    <input
+                        type="text"
+                        placeholder="https://news.ycombinator.com/rss"
+                        value={siteUrl}
+                        onChange={(e) => setSiteUrl(e.target.value)}
+                        style={{ width: "100%", padding: "12px", marginTop: "8px", borderRadius: "6px", border: "1px solid #ccc", boxSizing: "border-box" }}
+                    />
+                </div>
+
+                <h3 style={{ marginBottom: "12px" }}>Интереси:</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "25px" }}>
+                    {availableTopics.map(topic => (
+                        <label key={topic.id} style={{ display: "flex", alignItems: "center", cursor: "pointer", fontSize: "14px" }}>
+                            <input
+                                type="checkbox"
+                                checked={topics.includes(topic.id)}
+                                onChange={() => toggleTopic(topic.id)}
+                                style={{ marginRight: "10px" }}
+                            />
+                            {topic.label}
+                        </label>
+                    ))}
+                </div>
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
                     <button
                         onClick={handleSubscribe}
-                        style={{ padding: "10px", cursor: "pointer" }}
+                        disabled={loading}
+                        style={{ flex: "1", padding: "12px", background: "#007bff", color: "white", border: "none", borderRadius: "6px", cursor: loading ? "not-allowed" : "pointer", fontWeight: "bold" }}
                     >
-                        Абонирай се
+                        {loading ? "..." : "Абонирай ме"}
+                    </button>
+
+                    <button
+                        onClick={handleSendNow}
+                        disabled={loading}
+                        style={{ flex: "1", padding: "12px", background: "#28a745", color: "white", border: "none", borderRadius: "6px", cursor: loading ? "not-allowed" : "pointer", fontWeight: "bold" }}
+                    >
+                        {loading ? "..." : "Изпрати ми сега"}
                     </button>
 
                     <button
                         onClick={handleUnsubscribe}
-                        style={{
-                            padding: "10px",
-                            cursor: "pointer",
-                            marginLeft: "10px",
-                            background: "#ffdddd"
-                        }}
-                    >
-                        Отпиши се
-                    </button>
-                </div>
-
-                <div style={{ marginTop: "20px" }}>
-                    <button
-                        onClick={handleSendHackerNews}
                         disabled={loading}
-                        style={{
-                            padding: "10px",
-                            cursor: loading ? "not-allowed" : "pointer"
-                        }}
+                        style={{ width: "100%", padding: "10px", background: "transparent", color: "#dc3545", border: "1px solid #dc3545", borderRadius: "6px", cursor: loading ? "not-allowed" : "pointer", marginTop: "5px" }}
                     >
-                        {loading ? "Изпращане..." : "Изпрати Hacker News новини"}
-                    </button>
-
-                    <button
-                        onClick={handleSendWebsiteNews}
-                        disabled={loading}
-                        style={{
-                            padding: "10px",
-                            cursor: loading ? "not-allowed" : "pointer",
-                            marginLeft: "10px",
-                            background: "#ddffdd"
-                        }}
-                    >
-                        {loading ? "Изпращане..." : "Изпрати новини от сайта"}
+                        Отказ от абонамент
                     </button>
                 </div>
             </div>
+
+            <p style={{ textAlign: "center", fontSize: "12px", color: "#888", marginTop: "20px" }}>
+                * Абонаментът изпраща новини автоматично всеки ден в 11:31 ч.
+            </p>
         </div>
     );
 }

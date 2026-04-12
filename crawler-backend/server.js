@@ -1,12 +1,10 @@
 require("dotenv").config();
-
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const cron = require("node-cron");
 
 const User = require("./models/User");
-
 const { smartCrawl } = require("./services/smartCrawler");
 const { classifyText } = require("./services/classificationService");
 const { sendEmail } = require("./services/emailService");
@@ -15,157 +13,80 @@ const fetchNewsRoutes = require("./routes/fetchNews");
 const newsRoutes = require("./routes/news");
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 
-
-// ----------------------
 // ROUTES
-// ----------------------
-
 app.use("/", fetchNewsRoutes);
-
 app.use("/", newsRoutes);
 
-
 // ----------------------
-// DAILY CRON (8:00 AM)
+// DAILY CRON (Автоматизирано изпращане)
 // ----------------------
-
-// ----------------------
-// DAILY CRON (8:00 AM)
-// ----------------------
-
-cron.schedule("42 10 * * *", async () => {
-    console.log("📅 Running daily news job...");
+cron.schedule("16 12 * * *", async () => {
+    console.log("📅 Стартиране на ежедневната задача за новини...");
 
     try {
-        const users = await User.find({ subscribed: true });
+        const subscribers = await User.find({ subscribed: true });
 
-        for (const user of users) {
+        // В кода, където обхождаш абонатите (Cron Job)
+        for (const user of subscribers) {
             try {
-                console.log("Processing:", user.email);
+                console.log(`Процесиране на абонат: ${user.email}`);
 
-                const normalizedTopics = Array.isArray(user.topics)
-                    ? user.topics.map(t => t?.toLowerCase()).filter(Boolean)
-                    : [];
+                const rawArticles = await smartCrawl(user.siteUrl);
+                if (!rawArticles || rawArticles.length === 0) continue;
 
-                // 1. SCRAPE
-                const articles = await smartCrawl(user.siteUrl);
+                // Филтриране на вече изпратени
+                const unseen = rawArticles.filter(a => !user.lastNewsLinks.includes(a.link));
+                if (unseen.length === 0) continue;
 
-                if (!articles.length) {
-                    console.log("No articles found for:", user.email);
-                    continue;
+                // Класификация
+                const llmInput = unseen.map(a => ({ title: a.title, link: a.link }));
+
+                // ВАЖНО: Тук classifyText връща масив благодарение на нашия фикс
+                const classified = await classifyText(JSON.stringify(llmInput));
+
+                // ТУК Е ФИКСЪТ: Проверка дали наистина е масив преди филтриране
+                let finalArticles = [];
+                if (Array.isArray(classified)) {
+                    finalArticles = classified.filter(a =>
+                        user.topics.includes(a.topic?.toLowerCase())
+                    );
+                } else if (classified && classified.articles) {
+                    // Защита, ако случайно върне обекта {"articles": [...]}
+                    finalArticles = classified.articles.filter(a =>
+                        user.topics.includes(a.topic?.toLowerCase())
+                    );
                 }
 
-                let filteredArticles = articles;
+                if (finalArticles.length > 0) {
+                    // Изпращане - тук sendEmail очаква МАСИВ
+                    await sendEmail(user.email, finalArticles);
 
-                // 2. CLASSIFY ONLY IF SITE IS HACKER NEWS
-                const isHackerNews =
-                    user.siteUrl.includes("hnrss") ||
-                    user.siteUrl.includes("news.ycombinator.com");
-
-                if (normalizedTopics.length > 0 && isHackerNews) {
-                    const llmInput = articles.map(a => ({
-                        title: a.title,
-                        link: a.link,
-                        description: a.description
-                    }));
-
-                    let classified = await classifyText(JSON.stringify(llmInput));
-                    const parsed = safeJsonParse(classified);
-
-                    if (!parsed || !Array.isArray(parsed)) {
-                        console.log("⚠ LLM returned empty → skipping classification");
-                        filteredArticles = articles;
-                    } else {
-                        filteredArticles = parsed.filter(a =>
-                            a.topic &&
-                            normalizedTopics.includes(a.topic.toLowerCase())
-                        );
-                    }
+                    // Обновяване на историята
+                    user.lastNewsLinks = [...user.lastNewsLinks, ...finalArticles.map(a => a.link)].slice(-200);
+                    user.lastSentAt = new Date();
+                    await user.save();
                 }
-
-                // 3. REMOVE ALREADY SENT
-                const newArticles = filteredArticles.filter(
-                    a => !user.lastNewsLinks.includes(a.link)
-                );
-
-                if (!newArticles.length) {
-                    console.log("No new articles for:", user.email);
-                    continue;
-                }
-
-                // 4. EMAIL HTML
-                const html = `
-                    <h2>Your Daily News</h2>
-                    <ul>
-                        ${newArticles
-                            .map(a => `<li><a href="${a.link}">${a.title}</a></li>`)
-                            .join("")}
-                    </ul>
-                `;
-
-                // 5. SEND EMAIL
-                await sendEmail(user.email, html);
-
-                // 6. UPDATE USER
-                user.lastNewsLinks.push(...newArticles.map(a => a.link));
-                user.lastSentAt = new Date();
-                await user.save();
-
-                console.log("📧 Sent:", user.email);
-
             } catch (err) {
-                console.error("User processing error:", user.email, err.message);
+                console.error(`❌ Грешка при обработка на потребител ${user.email}:`, err.message);
             }
         }
-
     } catch (err) {
-        console.error("Daily job error:", err.message);
+        console.error("❌ Критична грешка в Cron задачата:", err.message);
     }
-
 }, {
     timezone: "Europe/Sofia"
 });
 
+// MongoDB Connection
+mongoose.connect(process.env.MONGO_URI)
+    .then(() => console.log("✅ MongoDB свързана успешно"))
+    .catch(err => console.error("❌ MongoDB грешка:", err));
 
-
-// ----------------------
-// MongoDB
-// ----------------------
-
-mongoose
-    .connect(process.env.MONGO_URI)
-    .then(() => {
-        console.log("MongoDB connected successfully");
-    })
-    .catch((err) => {
-        console.error("MongoDB connection error:", err);
-    });
-
-
-// ----------------------
-// ERROR HANDLER
-// ----------------------
-
-app.use((err, req, res, next) => {
-    console.error("Server error:", err.stack);
-
-    res.status(500).json({
-        error: "Something went wrong on the server."
-    });
-});
-
-
-// ----------------------
 // SERVER START
-// ----------------------
-
 const PORT = process.env.PORT || 3030;
-
 app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-    console.log(`Local link: http://localhost:${PORT}`);
+    console.log(`🚀 Сървърът е активен на: http://localhost:${PORT}`);
 });
