@@ -1,7 +1,6 @@
 const cheerio = require("cheerio");
 const { safeFetch } = require("../utils/safeFetch");
 const { normalizeLink } = require("../utils/normalizeLink");
-const { cleanAndDeduplicate } = require("../utils/cleanAndDeduplicate");
 const { rssParser } = require("../utils/rssParser");
 
 async function findRSS(url) {
@@ -19,7 +18,8 @@ async function findRSS(url) {
             $('a[href$="/feed"]').attr("href");
 
         return normalizeLink(rssLink, url);
-    } catch {
+    } catch (err) {
+        console.log("RSS discovery error:", err.message);
         return null;
     }
 }
@@ -28,13 +28,16 @@ async function parseRSS(url) {
     try {
         const feed = await rssParser.parseURL(url);
 
-        return (feed.items || []).slice(0, 20).map(item => ({
-            title: item.title?.trim(),
-            description: item.contentSnippet || item.content || "",
-            link: normalizeLink(item.link, url),
-            pubDate: item.pubDate ? new Date(item.pubDate) : new Date(),
-            source: feed.title || url
-        }));
+        return (feed.items || [])
+            .slice(0, 20)
+            .map(item => ({
+                title: item.title?.trim(),
+                description: item.contentSnippet || item.content || "",
+                link: normalizeLink(item.link, url),
+                pubDate: item.pubDate ? new Date(item.pubDate) : new Date(),
+                source: feed.title || url
+            }));
+
     } catch (err) {
         console.log(`RSS parseURL failed: ${err.message}. Trying manual parse...`);
 
@@ -46,10 +49,12 @@ async function parseRSS(url) {
 
             return (feed.items || []).map(item => ({
                 title: item.title?.trim(),
-                link: normalizeLink(item.link, url)
+                link: normalizeLink(item.link, url),
+                pubDate: new Date(),
+                source: url
             }));
-        } catch {
-            console.log("All RSS attempts failed.");
+        } catch (err2) {
+            console.log("All RSS attempts failed:", err2.message);
             return [];
         }
     }

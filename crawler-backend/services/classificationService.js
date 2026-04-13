@@ -28,7 +28,7 @@ async function classifyText(text) {
             max_tokens: 2000
         });
 
-        const rawContent = response.choices[0].message.content?.trim();
+        const rawContent = response?.choices?.[0]?.message?.content?.trim();
         if (!rawContent) return [];
 
         if (rawContent.startsWith("<")) {
@@ -44,7 +44,9 @@ async function classifyText(text) {
             return [];
         }
 
-        return Array.isArray(parsed) ? parsed : (parsed.articles || []);
+        return Array.isArray(parsed)
+            ? parsed
+            : (parsed.articles || []);
 
     } catch (err) {
         console.error("LLM classification error:", err.message);

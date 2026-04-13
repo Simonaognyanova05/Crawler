@@ -12,16 +12,18 @@ async function newsService({ email, siteUrl, topics = [] }) {
         };
     }
 
-    let user = await User.findOne({ email });
+    const user = await User.findOne({ email });
     const isSubscriber = Boolean(user);
 
     const effectiveTopics = isSubscriber ? user.topics : topics;
+
     const normalizedTopics = Array.isArray(effectiveTopics)
         ? effectiveTopics.map(t => t?.toLowerCase()).filter(Boolean)
         : [];
 
     const articles = await smartCrawler(siteUrl);
-    if (!articles || !articles.length) {
+
+    if (!articles?.length) {
         return {
             error: true,
             status: 404,
@@ -30,7 +32,8 @@ async function newsService({ email, siteUrl, topics = [] }) {
     }
 
     let unseenArticles = articles;
-    if (isSubscriber && user.lastNewsLinks) {
+
+    if (isSubscriber && Array.isArray(user.lastNewsLinks)) {
         unseenArticles = articles.filter(a => !user.lastNewsLinks.includes(a.link));
     }
 
@@ -52,17 +55,21 @@ async function newsService({ email, siteUrl, topics = [] }) {
 
         const classified = await classifyText(JSON.stringify(llmInput));
 
-        if (Array.isArray(classified) && classified.length > 0) {
-            finalArticles = classified.filter(a =>
-                a.topic && normalizedTopics.includes(a.topic.toLowerCase())
-            );
-        } else {
+        const classifiedList = Array.isArray(classified)
+            ? classified
+            : classified?.articles || [];
+
+        if (!classifiedList.length) {
             return {
                 error: true,
                 status: 200,
                 message: "Няма новини, отговарящи на вашите теми"
             };
         }
+
+        finalArticles = classifiedList.filter(a =>
+            a.topic && normalizedTopics.includes(a.topic.toLowerCase())
+        );
     }
 
     if (!finalArticles.length) {
@@ -76,8 +83,13 @@ async function newsService({ email, siteUrl, topics = [] }) {
     await sendEmail(email, finalArticles);
 
     if (isSubscriber) {
-        const updatedLinks = [...user.lastNewsLinks, ...finalArticles.map(a => a.link)];
-        user.lastNewsLinks = updatedLinks.slice(-200);
+        const newLinks = finalArticles.map(a => a.link);
+
+        user.lastNewsLinks = [
+            ...user.lastNewsLinks,
+            ...newLinks
+        ].slice(-200);
+
         user.lastSentAt = new Date();
         await user.save();
     }

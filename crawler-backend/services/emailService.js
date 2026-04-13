@@ -3,28 +3,38 @@ const { config } = require("../config/env");
 
 async function sendEmail(to, articles) {
     try {
-        const articlesArray = Array.isArray(articles) ? articles : [];
+        const list = Array.isArray(articles) ? articles : [];
+        console.log(`Изпращане на имейл до ${to} (${list.length} статии)`);
 
-        console.log(`Sending email to: ${to} with ${articlesArray.length} articles.`);
+        let htmlBody = `
+            <h2 style="font-family: Arial, sans-serif;">Вашият новинарски отчет</h2>
+        `;
 
-        let htmlBody = `<h2>Вашият новинарски отчет</h2>`;
-
-        if (!articlesArray.length) {
-            htmlBody += `<p>Няма нови новини по избраните от Вас теми за този период.</p>`;
+        if (list.length === 0) {
+            htmlBody += `
+                <p style="font-family: Arial, sans-serif;">
+                    Няма нови новини по избраните от Вас теми за този период.
+                </p>
+            `;
         } else {
-            htmlBody += `<ul style="list-style: none; padding: 0;">`;
-
-            articlesArray.forEach(article => {
-                htmlBody += `
-                    <li style="margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
-                        <h3 style="margin: 0; color: #333;">${article.title}</h3>
-                        <p style="margin: 5px 0; color: #666;">Тема: <b>${article.topic}</b></p>
-                        <a href="${article.link}" style="color: #007bff; text-decoration: none; font-weight: bold;">Прочети повече →</a>
+            const itemsHtml = list
+                .map(article => `
+                    <li style="margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px; list-style: none;">
+                        <h3 style="margin: 0; color: #333; font-family: Arial, sans-serif;">
+                            ${article.title}
+                        </h3>
+                        <p style="margin: 5px 0; color: #666; font-family: Arial, sans-serif;">
+                            Тема: <b>${article.topic}</b>
+                        </p>
+                        <a href="${article.link}" 
+                           style="color: #007bff; text-decoration: none; font-weight: bold; font-family: Arial, sans-serif;">
+                           Прочети повече →
+                        </a>
                     </li>
-                `;
-            });
+                `)
+                .join("");
 
-            htmlBody += `</ul>`;
+            htmlBody += `<ul style="padding: 0; margin: 0;">${itemsHtml}</ul>`;
         }
 
         const info = await emailTransporter.sendMail({
@@ -34,7 +44,7 @@ async function sendEmail(to, articles) {
             html: htmlBody
         });
 
-        console.log("Email sent successfully:", info.messageId);
+        console.log(`Имейл изпратен успешно: ${info.messageId}`);
 
     } catch (err) {
         console.error("Email sending error:", err.message);

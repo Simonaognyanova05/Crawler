@@ -19,3 +19,4 @@ const PORT = process.env.PORT || 3030;
 app.listen(PORT, () => {
     console.log(`Сървърът е активен на: http://localhost:${PORT}`);
 });
+
